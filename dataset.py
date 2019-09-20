@@ -5,7 +5,6 @@ import json
 import sys
 import os
 
-
 folder_path = "C:\\data\\"
 data_file_name = "data_2033.json"
 diag_file_name = "diagnosis.json"
@@ -14,12 +13,12 @@ pkl_file_name = "data_2033.pkl"
 leads_names = ['i', 'ii', 'iii', 'avr', 'avl', 'avf', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6']
 FREQUENCY_OF_DATASET = 250
 
-def parser(folder_path):
 
+def parser(folder_path):
     try:
         infile = open(folder_path + data_file_name, 'rb')
         data = json.load(infile)
-        diag_dict = get_giag_dict()
+        diag_dict = get_diag_dict()
 
         X = []
         Y = []
@@ -65,12 +64,14 @@ def parser(folder_path):
               ") and file with structure of diagnosis (" + diag_file_name + ").")
         sys.exit(0)
 
-def get_giag_dict():
 
+def get_diag_dict():
     def deep(data, diag_list):
         for diag in data:
-            if diag['type'] == 'diagnosis': diag_list.append(diag['name'])
-            else: deep(diag['value'], diag_list)
+            if diag['type'] == 'diagnosis':
+                diag_list.append(diag['name'])
+            else:
+                deep(diag['value'], diag_list)
 
     try:
         infile = open(folder_path + diag_file_name, 'rb')
@@ -90,6 +91,7 @@ def get_giag_dict():
               ") and file with structure of diagnosis (" + diag_file_name + ").")
         sys.exit(0)
 
+
 def load_dataset(folder_path=folder_path):
     if not os.path.exists(folder_path + pkl_file_name):
         xy = parser(folder_path)
@@ -100,6 +102,7 @@ def load_dataset(folder_path=folder_path):
     infile.close()
 
     return dataset
+
 
 def fix_bw(xy, folder_path):
     print("Baseline wondering fixing is started. It's take some time.")
