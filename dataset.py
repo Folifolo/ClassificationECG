@@ -122,5 +122,14 @@ def fix_bw(xy, folder_path):
     print("The dataset is saved.")
 
 
+def normalize_data(X):
+    mn = X.mean(axis=0)
+    st = X.std(axis=0)
+    x_std = np.zeros(X.shape)
+    for i in range(X.shape[0]):
+        x_std[i] = (X[i] - mn) / st
+    return x_std
+
+
 if __name__ == "__main__":
     xy = load_dataset()

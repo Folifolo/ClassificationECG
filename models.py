@@ -41,24 +41,27 @@ def build_simple_classifier(size, reg_rate=0):
     num_layers = 3
     alpha = 0.2
     layers = [
-        [50, 90, 2],
-        [100, 50, 7],
-        [100, 30, 2]
+        [32, 10, 4],
+        [32, 20, 4],
+        [32, 30, 4]
     ]
     input_ecg = Input(shape=(size, 1))
     for i in np.arange(0, num_layers, 1):
         layer_params = layers[i]
         if i == 0:
-            x = Conv1D(layer_params[0], layer_params[1], padding="same", activity_regularizer=l2(reg_rate))(input_ecg)
+            x = Conv1D(layer_params[0], layer_params[1], padding="same")(input_ecg)
         else:
-            x = Conv1D(layer_params[0], layer_params[1], padding="same", activity_regularizer=l2(reg_rate))(x)
+            x = Conv1D(layer_params[0], layer_params[1], padding="same")(x)
+        x = Dropout(0.2)(x)
+        x = Conv1D(layer_params[0], layer_params[1], padding="same")(x)
+        x = BatchNormalization()(x)
         x = MaxPooling1D(layer_params[2])(x)
-        x = LeakyReLU(alpha=alpha)(x)
+        x = ReLU()(x)
 
     x = Flatten()(x)
     x = Dense(2048, activation="relu")(x)
     x = Dense(512, activation="relu")(x)
-    output = Dense(1, activation="sigmoid")(x)
+    output = Dense(2, activation="sigmoid")(x)
     model = Model(input_ecg, output)
 
     return model
