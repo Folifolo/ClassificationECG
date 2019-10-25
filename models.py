@@ -8,36 +8,22 @@ from keras.callbacks import Callback
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
 
-def f1(y_true, y_pred):
-    def recall(y_true, y_pred):
-        """Recall metric.
+def fit_save(model, X, Y, batch_size, validation_data, epochs, name="model1"):
+    Max = 0
+    for i in np.arange(0, epochs):
 
-        Only computes a batch-wise average of recall.
+        history = model.fit(X, Y, batch_size=batch_size, validation_data=validation_data,
+                            epochs=1, verbose=0)
 
-        Computes the recall, a metric for multi-label classification of
-        how many relevant items are selected.
-        """
-        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-        possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
-        recall = true_positives / (possible_positives + K.epsilon())
-        return recall
+        y_pred1 = model.predict(validation_data[0])
+        y_pred = np.argmax(y_pred1, axis=1)
 
-    def precision(y_true, y_pred):
-        """Precision metric.
-
-        Only computes a batch-wise average of precision.
-
-        Computes the precision, a metric for multi-label classification of
-        how many selected items are relevant.
-        """
-        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-        predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
-        precision = true_positives / (predicted_positives + K.epsilon())
-        return precision
-
-    precision = precision(y_true, y_pred)
-    recall = recall(y_true, y_pred)
-    return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
+        y_test = np.argmax(validation_data[1], axis=1)
+        tmp = f1_score(y_test, y_pred, average="macro")
+        if tmp > Max:
+            Max = tmp
+            model.save(name + ".h5")
+        print('f1 score: ' + str(tmp) + ", max: " + str(Max))
 
 
 def build_simple_encoder(size, reg_rate=0):
@@ -71,7 +57,7 @@ def build_simple_encoder(size, reg_rate=0):
     return encoder, decoder, autoencoder
 
 
-def create_dence_block(input, num_layers=4, params=[10, 50, 4]):
+def create_dense_block(input, num_layers=4, params=[10, 50, 2]):
     for i in np.arange(0, num_layers, 1):
         if i == 0:
             x = Conv1D(params[0], params[1], padding="same")(input)
@@ -84,28 +70,29 @@ def create_dence_block(input, num_layers=4, params=[10, 50, 4]):
         if i == 0:
             inp = x
         else:
-            inp = Concatenate(axis=1)([inp, x])
+            tmp = MaxPool1D(params[2])(x)
+            inp = Concatenate(axis=1)([inp, tmp])
     return x;
 
 
 def build_simple_classifier(size, reg_rate=0):
     input_ecg = Input(shape=(size, 1))
+    x = create_dense_block(input_ecg, 3, [10, 50, 2])
 
-    x = create_dence_block(input_ecg, 4, [10, 50, 4])
+    x = MaxPooling1D(2)(x)
+    x = Conv1D(10, 40, padding="same")(x)
+    x = MaxPooling1D(2)(x)
+    x = Conv1D(10, 30, padding="same")(x)
 
-    x = MaxPooling1D(4)(x)
-    x = Conv1D(10, 50, padding="same")(x)
-    x = MaxPooling1D(4)(x)
-    x = Conv1D(10, 50, padding="same")(x)
+    x = create_dense_block(x, 4, [10, 20, 2])
+    x = MaxPooling1D(2)(x)
+    x = Conv1D(10, 10, padding="same")(x)
+    x = MaxPooling1D(2)(x)
+    x = Conv1D(5, 3, padding="same")(x)
 
-    x = create_dence_block(x, 4, [10, 50, 4])
-    x = MaxPooling1D(4)(x)
-    x = Conv1D(10, 50, padding="same")(x)
-    x = MaxPooling1D(4)(x)
-    x = Conv1D(10, 50, padding="same")(x)
 
     x = Flatten()(x)
-    x = Dense(2048, activation="relu")(x)
+    x = Dense(2024, activation="relu")(x)
     x = Dense(512, activation="relu")(x)
     output = Dense(2, activation="sigmoid")(x)
     model = Model(input_ecg, output)

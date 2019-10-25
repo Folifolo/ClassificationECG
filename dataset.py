@@ -11,7 +11,7 @@ diag_file_name = "diagnosis.json"
 pkl_file_name = "data_2033.pkl"
 
 leads_names = ['i', 'ii', 'iii', 'avr', 'avl', 'avf', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6']
-FREQUENCY_OF_DATASET = 250
+FREQUENCY_OF_DATASET = 500
 
 
 def parser(folder_path):
@@ -132,4 +132,6 @@ def normalize_data(X):
 
 
 if __name__ == "__main__":
-    xy = load_dataset()
+    qwe = get_diag_dict()
+    print(qwe['atrial_fibrillation'])
+    # xy = load_dataset()
