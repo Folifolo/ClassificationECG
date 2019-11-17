@@ -1,18 +1,14 @@
-from keras.models import Sequential, load_model, save_model, Model
-from keras.utils import to_categorical
+import tensorflow as tf
 from keras.layers import *
-import keras.backend as K
-from keras.regularizers import l2
-from keras.optimizers import RMSprop
-from keras.callbacks import Callback
-from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
+from keras.models import Model
+from sklearn.metrics import f1_score
 
 
-def fit_save(model, X, Y, batch_size, validation_data, epochs, name="model1"):
+def fit_save(model, x, y, batch_size, validation_data, epochs, name="model1"):
     Max = 0
     for i in np.arange(0, epochs):
 
-        history = model.fit(X, Y, batch_size=batch_size, validation_data=validation_data,
+        history = model.fit(x, y, batch_size=batch_size, validation_data=validation_data,
                             epochs=1, verbose=0)
 
         y_pred1 = model.predict(validation_data[0])
@@ -26,75 +22,143 @@ def fit_save(model, X, Y, batch_size, validation_data, epochs, name="model1"):
         print('f1 score: ' + str(tmp) + ", max: " + str(Max))
 
 
-def build_simple_encoder(size, reg_rate=0):
-    input_ecg = Input(shape=(size, 1, 1))
-    x = Conv2D(50, (90, 1), padding="same", activity_regularizer=l2(reg_rate))(input_ecg)
-    x = MaxPooling2D((2, 1))(x)
-    x = LeakyReLU(alpha=0.2)(x)
+def fit_generator_save(model, generator, steps_per_epoch, validation_data, epochs, name="model1"):
+    max_f1 = 0
+    for epoch in np.arange(0, epochs):
 
-    x = Conv2D(100, (50, 1), padding="same", activity_regularizer=l2(reg_rate))(x)
-    x = MaxPooling2D((7, 1))(x)
-    x = LeakyReLU(alpha=0.2)(x)
+        history = model.fit_generator(generator, steps_per_epoch=steps_per_epoch,
+                                      epochs=1, verbose=0)
 
-    x = Conv2D(100, (30, 1), padding="same", activity_regularizer=l2(reg_rate))(x)
-    x = MaxPooling2D((2, 1))(x)
-    encoded = LeakyReLU(alpha=0.2)(x)
+        y_prediction = np.argmax(model.predict(validation_data[0]), axis=1)
+        y_labels = np.argmax(validation_data[1], axis=1)
 
-    input_encoded = Input(shape=(89, 1, 100))
-    x = Conv2DTranspose(100, (30, 1), padding="same", strides=(2, 1), activity_regularizer=l2(reg_rate))(input_encoded)
-    x = LeakyReLU(alpha=0.2)(x)
-
-    x = Conv2DTranspose(100, (50, 1), padding="same", strides=(7, 1), activity_regularizer=l2(reg_rate))(x)
-    x = LeakyReLU(alpha=0.2)(x)
-
-    x = Conv2DTranspose(1, (90, 1), padding="same", strides=(2, 1), activity_regularizer=l2(reg_rate))(x)
-    decoded = LeakyReLU(alpha=0.2)(x)
-
-    encoder = Model(input_ecg, encoded, name="encoder")
-    decoder = Model(input_encoded, decoded, name="decoder")
-    autoencoder = Model(input_ecg, decoder(encoder(input_ecg)), name="autoencoder")
-
-    return encoder, decoder, autoencoder
+        current_f1 = f1_score(y_labels, y_prediction, average="macro")
+        if current_f1 > max_f1:
+            max_f1 = current_f1
+            model.save(name + ".h5")
+        print('epoch: ', epoch, 'f1 score: ', current_f1, "max: ", max_f1)
 
 
-def create_dense_block(input, num_layers=4, params=[10, 50, 2]):
-    for i in np.arange(0, num_layers, 1):
-        if i == 0:
-            x = Conv1D(params[0], params[1], padding="same")(input)
-        else:
-            x = Conv1D(params[0], params[1], padding="same")(inp)
-        # x = Dropout(0.2)(x)
-        x = BatchNormalization()(x)
-        # x = MaxPooling1D(params[2])(x)
-        x = ReLU()(x)
-        if i == 0:
-            inp = x
-        else:
-            tmp = MaxPool1D(params[2])(x)
-            inp = Concatenate(axis=1)([inp, tmp])
-    return x;
+class KMaxPooling(Layer):
+    """
+    K-max pooling layer that extracts the k-highest activations from a sequence (2nd dimension).
+    TensorFlow backend.
+    """
+
+    def __init__(self, k=1, **kwargs):
+        super().__init__(**kwargs)
+        self.input_spec = InputSpec(ndim=3)
+        self.k = k
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], (input_shape[2] * self.k))
+
+    def call(self, inputs):
+        # swap last two dimensions since top_k will be applied along the last dimension
+        shifted_input = tf.transpose(inputs, [0, 2, 1])
+
+        # extract top_k, returns two tensors [values, indices]
+        top_k = tf.nn.top_k(shifted_input, k=self.k, sorted=True, name=None)[0]
+
+        # return flattened output
+        return top_k
 
 
-def build_simple_classifier(size, reg_rate=0):
-    input_ecg = Input(shape=(size, 1))
-    x = create_dense_block(input_ecg, 3, [10, 50, 2])
+def build_model1(size):
+    input_ecg = Input(shape=(size, 2))
 
-    x = MaxPooling1D(2)(x)
-    x = Conv1D(10, 40, padding="same")(x)
-    x = MaxPooling1D(2)(x)
-    x = Conv1D(10, 30, padding="same")(x)
+    x = Lambda(lambda layer: layer[:, :, 0:1])(input_ecg)
+    x1 = Lambda(lambda layer: layer[:, :, 1:2])(input_ecg)
 
-    x = create_dense_block(x, 4, [10, 20, 2])
-    x = MaxPooling1D(2)(x)
-    x = Conv1D(10, 10, padding="same")(x)
-    x = MaxPooling1D(2)(x)
-    x = Conv1D(5, 3, padding="same")(x)
+    for i in range(5):
+        x = Conv1D(32, 5, padding='same')(x)
 
+    x = Concatenate(axis=2)([x, x1])
+    x = KMaxPooling(k=100)(x)
 
     x = Flatten()(x)
-    x = Dense(2024, activation="relu")(x)
-    x = Dense(512, activation="relu")(x)
+    x = Dense(32, activation="relu")(x)
     output = Dense(2, activation="sigmoid")(x)
+    model = Model(input_ecg, output)
+
+    return model
+
+
+def build_model2(size):
+    input_ecg = Input(shape=(size, 2))
+
+    x = Lambda(lambda layer: layer[:, :, 0:1])(input_ecg)
+    x1 = Lambda(lambda layer: layer[:, :, 1:2])(input_ecg)
+
+    for i in range(5):
+        x = Conv1D(32, 5, dilation_rate=i + 1, padding='same')(x)
+
+    x = Concatenate(axis=2)([x, x1])
+    x = KMaxPooling(k=100)(x)
+
+    x = Flatten()(x)
+    x = Dense(32, activation="relu")(x)
+    output = Dense(2, activation="sigmoid")(x)
+    model = Model(input_ecg, output)
+
+    return model
+
+
+def build_model3(size):
+    input_ecg = Input(shape=size)
+
+    layers_leads = []
+    for i in range(size[1]):
+        tmp = Lambda(lambda layer: layer[:, :, i:i + 1])(input_ecg)
+        tmp = Conv1D(20, 150, strides=75)(tmp)
+        layers_leads.append(Reshape((-1, 20, 1))(tmp))
+
+    x = Concatenate(axis=3)(layers_leads)
+
+    resid = Conv2D(7, (3, 3), dilation_rate=1, padding='same')(x)
+    for i in np.arange(1, 5):
+        x = Conv2D(7, (3, 3), dilation_rate=(i ** 2, i ** 2), padding='same', activation='relu')(resid)
+        x = BatchNormalization()(x)
+        x = Conv2D(7, (3, 3), dilation_rate=(i ** 2, i ** 2), padding='same', activation='relu')(x)
+        x = BatchNormalization()(x)
+        resid = Concatenate(axis=3)([x, resid])
+
+    x = Conv2D(35, (1, 1), dilation_rate=(1, 1))(resid)
+    x = BatchNormalization()(x)
+    x = AvgPool2D(pool_size=(2, 2))(x)
+
+    x = Flatten()(x)
+    output = Dense(2, activation="softmax")(x)
+    model = Model(input_ecg, output)
+
+    return model
+
+
+def build_model4(size):
+    input_ecg = Input(shape=size)
+
+    layers_leads = []
+    for i in range(size[1]):
+        tmp = Lambda(lambda layer: layer[:, :, i:i + 1])(input_ecg)
+        tmp = Conv1D(20, 100, strides=50)(tmp)
+        layers_leads.append(Reshape((-1, 20, 1))(tmp))
+
+    x = Concatenate(axis=3)(layers_leads)
+
+    resid = Conv2D(7, (3, 3), dilation_rate=1, padding='same')(x)
+    for i in np.arange(1, 3):
+        x = Conv2D(7, (3, 3), dilation_rate=(i ** 2, i ** 2), padding='same', activation='relu')(resid)
+        x = BatchNormalization()(x)
+        x = Conv2D(7, (3, 3), dilation_rate=(i ** 2, i ** 2), padding='same', activation='relu')(x)
+        x = BatchNormalization()(x)
+        resid = Concatenate(axis=3)([x, resid])
+
+    x = Conv2D(35, (1, 1), dilation_rate=(1, 1))(resid)
+    x = BatchNormalization()(x)
+    x = AvgPool2D(pool_size=(2, 2))(x)
+
+    x = Flatten()(x)
+    output = Dense(2, activation="softmax")(x)
     model = Model(input_ecg, output)
 
     return model

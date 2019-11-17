@@ -1,9 +1,11 @@
-import BaselineWanderRemoval as bwr
-import pickle as pkl
-import numpy as np
 import json
-import sys
 import os
+import pickle as pkl
+import sys
+
+import BaselineWanderRemoval as bwr
+import numpy as np
+from random import randint
 
 folder_path = "C:\\data\\"
 data_file_name = "data_2033.json"
@@ -14,9 +16,9 @@ leads_names = ['i', 'ii', 'iii', 'avr', 'avl', 'avf', 'v1', 'v2', 'v3', 'v4', 'v
 FREQUENCY_OF_DATASET = 500
 
 
-def parser(folder_path):
+def parser(path):
     try:
-        infile = open(folder_path + data_file_name, 'rb')
+        infile = open(path + data_file_name, 'rb')
         data = json.load(infile)
         diag_dict = get_diag_dict()
 
@@ -59,7 +61,7 @@ def parser(folder_path):
         return {"x": X, "y": Y}
 
     except FileNotFoundError:
-        print("File " + data_file_name + " has not found.\nThe specified folder (" + folder_path +
+        print("File " + data_file_name + " has not found.\nThe specified folder (" + path +
               ") must contain files with data (" + data_file_name +
               ") and file with structure of diagnosis (" + diag_file_name + ").")
         sys.exit(0)
@@ -131,7 +133,29 @@ def normalize_data(X):
     return x_std
 
 
+def ECG_generator(X, Y, batch_size, leng, leads):
+    while 1:
+        X_batch = np.zeros((batch_size, leng, leads))
+        Y_batch = np.zeros((batch_size, Y.shape[1]))
+        for i in range(batch_size):
+            ECG_num = randint(0, X.shape[0] - 1)
+            start = randint(0, X.shape[1] - leng - 1)
+            X_batch[i] = X[ECG_num, start:start + leng, :leads]
+            Y_batch[i] = Y[ECG_num]
+
+        yield (X_batch, Y_batch)
+
+
 if __name__ == "__main__":
     qwe = get_diag_dict()
+    for diagnosis, number in qwe.items():
+        for search_num in [125, 44, 63, 158, 161, 2, 156, 45, 60, 157, 159, 15, 47, 46, 120, 123, 0]:
+            if number == search_num:
+                print(diagnosis)
     print(qwe['atrial_fibrillation'])
-    # xy = load_dataset()
+    print(qwe['atrial_flutter_undefined'])
+    print(qwe['atrial_flutter_typical'])
+    print(qwe['atrial_flutter_atypical'])
+    print(qwe['extrasystole_atrial_blocked'])
+    print(qwe['extrasystole_atrial_with_aberrant_conduction'])
+    print(qwe['extrasystole_atrial_nodal'])

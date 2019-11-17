@@ -1,12 +1,11 @@
-import torch
-from dataset import load_dataset
-from matplotlib import pyplot as plt
 import pickle as pkl
+
 import numpy as np
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from keras.utils import np_utils
+from matplotlib import pyplot as plt
+from sklearn.model_selection import train_test_split
 
-
-# import torchvision
+from dataset import load_dataset, normalize_data
 
 
 def smooth_annotator_output(signal, tolerance=20):
@@ -67,6 +66,38 @@ def get_r_peaks(ecg, intervals):
         R_peaks.append(tmp)
 
     return R_peaks
+
+
+def load_annotation():
+    with open('raw_output.pkl', 'rb') as f:
+        segmentation = pkl.load(f)
+
+    segm = np.zeros((segmentation.shape[0], segmentation.shape[1], 4))
+
+    for i in range(4):
+        segm[:, :, i] = np.where(segmentation == i, np.ones(segmentation.shape), np.zeros(segmentation.shape))
+
+    return segm
+
+
+def load_processed_dataset(diags):
+    xy = load_dataset()
+    X = xy["x"]
+    X = normalize_data(X)
+    annotation = load_annotation()
+    X = np.concatenate((X, annotation), axis=2)
+    Y = xy["y"]
+
+    Y_new = np.zeros(Y.shape[0])
+    for i in range(Y.shape[0]):
+        for j in range(len(diags)):
+            if Y[i, j] == 1:
+                Y_new[i] = 1
+    Y = np_utils.to_categorical(Y_new, 2)
+
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.25, random_state=42)
+
+    return X_train, X_test, Y_train, Y_test
 
 
 if __name__ == "__main__":
